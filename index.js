@@ -67,6 +67,12 @@ async function main() {
             continue;
         }
 
+        // '대관' 제외 (사용자 요청)
+        if (detail.title.includes('대관')) {
+            console.log(`⏩ [${count}/${items.length}] 대관 정보 제외: ${detail.title}`);
+            continue;
+        }
+
         // Check for duplicate using docId
         const existing = await calendarService.findEvent(targetCalendarId, detail.docId, detail.startDate);
         if (existing) {

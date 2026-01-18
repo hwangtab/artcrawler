@@ -78,6 +78,13 @@ async function main() {
         const isGenreMatch = genre.includes('전체') ||
             genre.includes('음악');
 
+        // 3. '대관' 제외 (사용자 요청: 쓸데없는 정보 제외)
+        if (detail.title.includes('대관')) {
+            // console.log(`⏩ [Skip] 대관 정보 제외: ${detail.title}`);
+            process.stdout.write('.');
+            continue;
+        }
+
         if (!isRegionMatch || !isGenreMatch) {
             // console.log(`⏩ [Skip] 조건 불일치: [${genre}/${region}] ${detail.title}`);
             process.stdout.write('.'); // Show progress
