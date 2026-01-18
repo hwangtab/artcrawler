@@ -73,10 +73,9 @@ async function main() {
             region.includes('전체') ||
             region.includes('경기');
 
-        // 2. 장르: '전체' 또는 '음악'이 포함된 경우
+        // 2. 장르: '음악'이 포함된 경우 (사용자 요청: 음악만)
         const genre = detail.field || '';
-        const isGenreMatch = genre.includes('전체') ||
-            genre.includes('음악');
+        const isGenreMatch = genre.includes('음악');
 
         // 3. '대관' 제외 (사용자 요청: 쓸데없는 정보 제외)
         if (detail.title.includes('대관')) {

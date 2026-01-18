@@ -88,7 +88,7 @@ async function main() {
 
             // Filter Logic (Same as index_personal.js)
             const isRegionMatch = region.includes('전국') || region.includes('전체') || region.includes('경기');
-            const isGenreMatch = genre.includes('전 전체') || genre.includes('전체') || genre.includes('음악'); // '전 전체' check just in case
+            const isGenreMatch = genre.includes('음악'); // Only Music
 
             if (isRegionMatch && isGenreMatch) {
                 try {
