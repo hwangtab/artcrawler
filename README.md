@@ -3,7 +3,7 @@
 [공공 예술지원사업 데이터]의 공고를 자동으로 수집하여 구글 캘린더에 연동해주는 도구입니다.
 
 ## ✨ 주요 기능
-- **자동 수집**: 진행중인 모든 예술 지원사업 공고를 크롤링합니다.
+- **자동 수집**: 아트누리(진행중·예정 공고 전체)와 KOCCA(문화예술 관련 공고)를 수집합니다.
 - **캘린더 연동**: 공고 기간(시작~종료), 제목, 상세 링크를 구글 캘린더에 자동으로 등록합니다.
 - **스마트 기능**:
     - **중복 방지**: 이미 등록된 공고는 건너뜁니다.
@@ -139,7 +139,9 @@ launchctl bootout gui/$(id -u)/com.hwangtab.artcrawler
 | :--- | :--- |
 | 실행 요일·시각 | `com.hwangtab.artcrawler.plist`의 `StartCalendarInterval` (`Weekday` 1=월요일) |
 | 등록할 캘린더 | `auto.js`의 `CALENDAR_ID` (또는 환경변수 `CALENDAR_ID`) |
-| 수집 범위 | `crawler.js`의 `COLLECT_STATES` (기본: `진행중`, `예정`) |
+| 수집 범위 (아트누리) | `crawler.js`의 `COLLECT_STATES` (기본: `진행중`, `예정`) |
+| 장르 키워드 (KOCCA) | `sources/kocca.js`의 `INCLUDE_KEYWORDS` |
+| 수집 소스 추가 | `sources/`에 어댑터 작성 후 `auto.js`의 `SOURCES`에 추가 |
 
 plist를 수정한 뒤에는 다시 복사하고 `bootout` → `bootstrap`으로 재등록해야 반영됩니다.
 
