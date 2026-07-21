@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  예술지원사업 캘린더 자동 등록 — 매주 월요일 오전 9시
+
+  설치:   cp com.hwangtab.artcrawler.plist ~/Library/LaunchAgents/
+          launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hwangtab.artcrawler.plist
+  해제:   launchctl bootout gui/$(id -u)/com.hwangtab.artcrawler
+  즉시실행: launchctl kickstart -p gui/$(id -u)/com.hwangtab.artcrawler
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hwangtab.artcrawler</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/hwang-gyeongha/artcrawler/auto.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/hwang-gyeongha/artcrawler</string>
+
+    <!-- 매주 월요일(Weekday 1) 오전 9시 00분 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- 실행 기록은 logs/run.log에 계속 덧붙는다 -->
+    <key>StandardOutPath</key>
+    <string>/Users/hwang-gyeongha/artcrawler/logs/run.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/hwang-gyeongha/artcrawler/logs/run.log</string>
+
+    <!-- 등록하거나 로그인할 때마다 실행되지 않도록 한다 -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

@@ -39,7 +39,12 @@ class CalendarService {
         await fs.writeFile(TOKEN_PATH, payload);
     }
 
-    async authorize() {
+    /**
+     * @param {object} [options]
+     * @param {boolean} [options.interactive=true] false면 브라우저 로그인 창을 절대 띄우지 않는다.
+     *   (launchd 자동 실행처럼 사람이 없는 환경에서 무한 대기에 빠지는 것을 방지)
+     */
+    async authorize({ interactive = true } = {}) {
         console.log('🔐 구글 캘린더 인증을 시도합니다...');
         let client = await this.loadSavedCredentialsIfExist();
         if (client) {
@@ -51,6 +56,14 @@ class CalendarService {
                 await this.calendar.calendarList.list({ maxResults: 1 });
                 return client;
             } catch (e) {
+                if (!interactive) {
+                    // 토큰은 지우지 않는다. 일시적 네트워크 오류일 수도 있고,
+                    // 지워버리면 사용자가 원인을 파악하기 더 어려워진다.
+                    throw new Error(
+                        `저장된 인증 토큰을 사용할 수 없습니다 (${e.message}). ` +
+                        '터미널에서 `node index.js`를 한 번 실행해 다시 로그인해주세요.'
+                    );
+                }
                 console.log('⚠️ 저장된 인증 정보가 만료되었습니다. 다시 로그인을 진행합니다...');
                 await fs.unlink(TOKEN_PATH).catch(() => { });
                 client = null; // Force re-auth
@@ -58,6 +71,11 @@ class CalendarService {
         }
 
         if (!client) {
+            if (!interactive) {
+                throw new Error(
+                    'token.json이 없습니다. 터미널에서 `node index.js`를 한 번 실행해 최초 로그인을 완료해주세요.'
+                );
+            }
             try {
                 client = await authenticate({
                     scopes: SCOPES,
@@ -133,6 +151,10 @@ class CalendarService {
         // If an event is Jan 1 - Jan 3, we should send start: Jan 1, end: Jan 4.
         // Let's increment the end date string by 1 day.
         const endDt = new Date(endDate);
+        if (isNaN(endDt.getTime())) {
+            console.warn(`⚠️ 잘못된 종료일자로 일정 등록 건너뜀: ${title} (endDate="${endDate}")`);
+            return;
+        }
         endDt.setDate(endDt.getDate() + 1);
         resource.end.date = endDt.toISOString().split('T')[0];
 

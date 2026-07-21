@@ -96,6 +96,55 @@ node cleanup.js
 
 ---
 
+## ⏰ 주 1회 자동 실행 (macOS)
+
+매주 월요일 오전 9시에 새 공고를 자동으로 캘린더에 등록합니다.
+
+### 동작 방식
+`auto.js`는 `index.js`와 달리 **캘린더를 직접 고르지 않고** 정해진 캘린더에 바로 등록합니다.
+사람이 지켜보지 않는 환경이므로 입력을 기다리지 않고, 로그인 창을 띄우지 않으며,
+사이트가 응답하지 않을 때를 대비해 최대 실행 시간(30분)을 둡니다.
+
+이미 등록된 공고는 공고 ID로 걸러내므로, 매주 돌려도 **신규 공고만 추가**됩니다.
+
+### 설치
+```bash
+# 최초 1회 로그인 (token.json 생성)
+node index.js
+
+# 스케줄 등록
+cp com.hwangtab.artcrawler.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hwangtab.artcrawler.plist
+```
+
+> 맥이 꺼져 있거나 잠들어 있어 실행 시각을 놓치면, launchd가 **깨어난 직후 밀린 실행을 자동으로 처리**합니다.
+
+### 관리
+```bash
+# 등록 상태 확인
+launchctl print gui/$(id -u)/com.hwangtab.artcrawler
+
+# 스케줄을 기다리지 않고 즉시 실행
+launchctl kickstart -p gui/$(id -u)/com.hwangtab.artcrawler
+
+# 실행 기록 보기
+tail -f logs/run.log
+
+# 자동 실행 해제
+launchctl bootout gui/$(id -u)/com.hwangtab.artcrawler
+```
+
+### 설정 바꾸기
+| 항목 | 위치 |
+| :--- | :--- |
+| 실행 요일·시각 | `com.hwangtab.artcrawler.plist`의 `StartCalendarInterval` (`Weekday` 1=월요일) |
+| 등록할 캘린더 | `auto.js`의 `CALENDAR_ID` (또는 환경변수 `CALENDAR_ID`) |
+| 수집 범위 | `crawler.js`의 `COLLECT_STATES` (기본: `진행중`, `예정`) |
+
+plist를 수정한 뒤에는 다시 복사하고 `bootout` → `bootstrap`으로 재등록해야 반영됩니다.
+
+---
+
 ## 🧑‍🎨 개인화 방법 (나만의 필터 만들기)
 
 `index_personal.js` 파일을 열어서 필터 조건을 수정할 수 있습니다.

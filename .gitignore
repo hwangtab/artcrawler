@@ -4,3 +4,4 @@ credentials.json
 token.json
 debug_detail.html
 *.log
+logs/
