@@ -155,7 +155,7 @@ class CalendarService {
             const events = res.data.items || [];
 
             const idHit = events.find(e =>
-                e.description && e.description.includes(`ID: ${dedupeKey}`)
+                e.description && e.description.includes(`ID: ${dedupeKey})`)
             );
             if (idHit) return { reason: 'id', event: idHit };
 

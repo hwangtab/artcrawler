@@ -9,6 +9,10 @@
  *
  * 수동 실행: node auto.js
  */
+// token.json / credentials.json은 process.cwd() 기준으로 읽히므로,
+// 어디서 실행하든 프로젝트 폴더를 기준으로 맞춘다.
+process.chdir(__dirname);
+
 const CalendarService = require('./calendar');
 
 // 수집 소스 어댑터 목록. 새 소스는 sources/에 어댑터를 만들어 여기에 추가한다.
@@ -16,10 +20,6 @@ const SOURCES = [
     require('./sources/artnuri'),
     require('./sources/kocca'),
 ];
-
-// token.json / credentials.json은 process.cwd() 기준으로 읽히므로,
-// 어디서 실행하든 프로젝트 폴더를 기준으로 맞춘다.
-process.chdir(__dirname);
 
 // 예술지원사업 캘린더
 const CALENDAR_ID = process.env.CALENDAR_ID ||

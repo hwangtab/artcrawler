@@ -38,6 +38,16 @@ test('ID·제목 모두 다르면 null', async () => {
     assert.strictEqual(dup, null);
 });
 
+test('dedupeKey가 기존 ID의 접두사여도 오탐하지 않는다', async () => {
+    const svc = stubService([
+        { summary: '다른 공고', description: '[지원사업 정보] (ID: CRL35690)' },
+    ]);
+    const dup = await svc.findDuplicate('cal', {
+        dedupeKey: 'CRL3569', title: '전혀 다른 새 공고 제목입니다', startDate: '2026-08-01',
+    });
+    assert.strictEqual(dup, null);
+});
+
 test('API 오류 시 null (등록을 막지 않는다)', async () => {
     const svc = new CalendarService();
     svc.calendar = { events: { list: async () => { throw new Error('boom'); } } };
