@@ -19,7 +19,7 @@
 - 모든 어댑터는 단독 실행 가능해야 한다: `node sources/<name>.js` → 수집 결과 출력.
 - 유사도 임계값: bigram Jaccard ≥ 0.75, 포함관계 판정은 정규화 후 10자 이상일 때만.
 - KOCCA 수집 카테고리: 1(자유공모)·2(지정공모)·3(모집공고). 4(종료된사업) 제외.
-- 테스트는 node:test 내장 러너 (`npm test` = `node --test test/`). 새 의존성 추가 금지.
+- 테스트는 node:test 내장 러너 (`npm test` = `node --test 'test/**/*.test.js'` — 계획 초안의 `node --test test/`는 Node 24에서 실패함을 실측 확인, 재귀 glob으로 정정). 새 의존성 추가 금지.
 
 ## 파일 구조
 
