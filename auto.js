@@ -99,8 +99,20 @@ main()
             }
         });
         console.log('-'.repeat(60) + '\n');
-        const allFailed = summary.length > 0 && summary.every(s => s.fetchFailed);
-        process.exit(allFailed ? 1 : 0);
+
+        // 부분 실패(소스 중 일부만 죽음)는 요약 로그만 봐서는 눈에 띄지 않는다.
+        // 고정 마커를 남겨 grep으로 사후에 잡을 수 있게 하고, exit code도 구분한다.
+        const failedSources = summary.filter(s => s.fetchFailed);
+        const allFailed = summary.length > 0 && failedSources.length === summary.length;
+        const anyFailed = failedSources.length > 0;
+        if (anyFailed) {
+            failedSources.forEach(s => {
+                console.error(`🚨 PARTIAL_FAILURE: ${s.source} 수집 실패`);
+            });
+        }
+        // exit code: 0 = 전 소스 성공, 1 = 전 소스 실패, 2 = 일부 소스만 실패
+        // (launchd의 LastExitStatus로 사후 확인 가능)
+        process.exit(allFailed ? 1 : (anyFailed ? 2 : 0));
     })
     .catch((error) => {
         clearTimeout(watchdog);

@@ -11,6 +11,14 @@ async function fetchAll() {
     const crawler = new ArtNuriCrawler();
     const list = await crawler.fetchList();
 
+    // 카나리: 아트누리는 상시 190건 이상의 진행중/예정 공고가 있어 정상 상태에서
+    // 0건은 나올 수 없다. crawler.fetchList()는 네트워크 오류도 catch해 빈 배열을
+    // 반환하므로, 여기서 throw하지 않으면 사이트 구조 변경·장애가 "0건 수집 성공"으로
+    // 조용히 넘어간다.
+    if (list.length === 0) {
+        throw new Error('아트누리 목록 0건 — 사이트 구조 변경 또는 네트워크 장애 의심');
+    }
+
     const items = [];
     let skippedNoDate = 0, skippedRental = 0, failed = 0, ongoingCount = 0;
     const stateCounts = {};
