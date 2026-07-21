@@ -4,100 +4,91 @@ const cheerio = require('cheerio');
 class ArtNuriCrawler {
     constructor() {
         this.baseUrl = 'https://artnuri.or.kr';
-        // pageUnit=100 to fetch more items at once (currently ~60 ongoing programs)
-        this.listUrl = 'https://artnuri.or.kr/crawler/info/search.do?key=2301170002&pageUnit=100';
     }
 
     async fetchList() {
         console.log('📡 아트누리 목록을 가져오는 중...');
         const allItems = [];
-        let pageIndex = 1;
         const pageUnit = 10; // Items per page (site default)
 
-        // 목록은 '진행중' → '예정' → '마감' 순으로 정렬되어 있고,
-        // 뒤로 갈수록 몇 년 전 공고까지 끝없이 이어진다 (500페이지에도 항목이 있다).
-        // 따라서 마감된 공고 구간에 닿으면 더 볼 이유가 없으므로 멈춘다.
-        const COLLECT_STATES = ['진행중', '예정'];
-        // 정렬이 한 번 흐트러져도 바로 멈추지 않도록 두는 여유분
-        const STOP_AFTER_EMPTY_PAGES = 2;
-        let emptyPageStreak = 0;
+        // 아트누리는 sc_isDo 쿼리 파라미터로 접수 상태별 서버 필터를 지원한다.
+        // 상태별로 끝까지(rowCount===0) 순회하면 정렬 가정 없이 전량을 확보할 수 있다.
+        // (sc_isDo=E는 '마감'이며 수집 대상이 아니다)
+        const STATES = [
+            { code: 'I', name: '진행중' },
+            { code: 'T', name: '예정' },
+            { code: 'U', name: '미정' },
+        ];
 
         try {
-            while (true) {
-                const url = `${this.baseUrl}/crawler/info/search.do?key=2301170002&pageUnit=${pageUnit}&pageIndex=${pageIndex}&sc_limitAt=Y`;
-                const { data } = await axios.get(url);
-                const $ = cheerio.load(data);
-                const pageItems = [];
-                let rowCount = 0;
+            for (const state of STATES) {
+                let pageIndex = 1;
+                let stateCount = 0;
 
-                // Select all list items on this page
-                $('ul.card li').each((i, el) => {
-                    const $el = $(el);
-                    const onclick = $el.find('a.title').attr('onclick');
-                    let docId, source, seNo;
+                while (true) {
+                    const url = `${this.baseUrl}/crawler/info/search.do?key=2301170002&pageUnit=${pageUnit}&pageIndex=${pageIndex}&sc_limitAt=Y&sc_isDo=${state.code}`;
+                    const { data } = await axios.get(url, { timeout: 15000 });
+                    const $ = cheerio.load(data);
+                    const pageItems = [];
+                    let rowCount = 0;
 
-                    if (onclick) {
-                        const match = onclick.match(/goView\('([^']*)',\s*'([^']*)',\s*'([^']*)'\)/);
-                        if (match) {
-                            docId = match[1];
-                            source = match[2];
-                            seNo = match[3];
+                    // Select all list items on this page
+                    $('ul.card li').each((i, el) => {
+                        const $el = $(el);
+                        const onclick = $el.find('a.title').attr('onclick');
+                        let docId, source, seNo;
+
+                        if (onclick) {
+                            const match = onclick.match(/goView\('([^']*)',\s*'([^']*)',\s*'([^']*)'\)/);
+                            if (match) {
+                                docId = match[1];
+                                source = match[2];
+                                seNo = match[3];
+                            }
                         }
-                    }
 
-                    if (!docId) return;
-                    rowCount++;
+                        if (!docId) return;
+                        rowCount++;
 
-                    // 접수 상태 배지 (진행중 / 예정 / 마감 / 미정)
-                    const state = $el.find('span[class*=state-st]').first().text().trim();
-                    if (!COLLECT_STATES.includes(state)) return;
+                        // 마감일은 <strong>마감일</strong><em>날짜</em> 구조에 들어있다
+                        let deadline = '';
+                        $el.find('ul.txt > li').each((j, li) => {
+                            if ($(li).find('strong').text().trim().includes('마감일')) {
+                                deadline = $(li).find('em').text().trim();
+                            }
+                        });
 
-                    // 마감일은 <strong>마감일</strong><em>날짜</em> 구조에 들어있다
-                    let deadline = '';
-                    $el.find('ul.txt > li').each((j, li) => {
-                        if ($(li).find('strong').text().trim().includes('마감일')) {
-                            deadline = $(li).find('em').text().trim();
-                        }
+                        const detailUrl = `${this.baseUrl}/crawler/info/view.do?docid=${docId}&key=2301170002&source=${encodeURIComponent(source)}&seNo=${seNo}`;
+                        pageItems.push({
+                            docId: docId,
+                            detailUrl: detailUrl,
+                            title: $el.find('a.title').text().trim(),
+                            state: state.name,
+                            deadline: deadline
+                        });
                     });
 
-                    const detailUrl = `${this.baseUrl}/crawler/info/view.do?docid=${docId}&key=2301170002&source=${encodeURIComponent(source)}&seNo=${seNo}`;
-                    pageItems.push({
-                        docId: docId,
-                        detailUrl: detailUrl,
-                        title: $el.find('a.title').text().trim(),
-                        state: state,
-                        deadline: deadline
-                    });
-                });
-
-                if (rowCount === 0) {
-                    // 더 이상 결과가 없다 (목록의 진짜 끝)
-                    break;
-                }
-
-                if (pageItems.length === 0) {
-                    // 항목은 있는데 전부 마감 상태 → 마감 구간에 진입했다
-                    emptyPageStreak++;
-                    if (emptyPageStreak >= STOP_AFTER_EMPTY_PAGES) {
-                        console.log(`  - 페이지 ${pageIndex}: 마감 공고 구간 도달, 수집을 종료합니다.`);
+                    if (rowCount === 0) {
+                        // 이 상태의 목록 끝
                         break;
                     }
-                } else {
-                    emptyPageStreak = 0;
+
                     allItems.push(...pageItems);
-                    console.log(`  - 페이지 ${pageIndex}: ${pageItems.length}개 수집 (누적: ${allItems.length}개)`);
+                    stateCount += pageItems.length;
+
+                    pageIndex++;
+
+                    // Safety limit to prevent infinite loops
+                    if (pageIndex > 100) {
+                        console.log(`⚠️ [${state.name}] 최대 페이지 수 도달 (100페이지)`);
+                        break;
+                    }
                 }
 
-                pageIndex++;
-
-                // Safety limit to prevent infinite loops
-                if (pageIndex > 200) {
-                    console.log('⚠️ 최대 페이지 수 도달 (200페이지)');
-                    break;
-                }
+                console.log(`  - ${state.name}: ${stateCount}건`);
             }
 
-            console.log(`✅ 총 ${allItems.length}개의 모집중/예정 지원사업을 발견했습니다.`);
+            console.log(`✅ 총 ${allItems.length}개의 지원사업을 발견했습니다.`);
             return allItems;
         } catch (error) {
             console.error('❌ 목록 가져오기 실패:', error.message);
@@ -108,7 +99,7 @@ class ArtNuriCrawler {
     async fetchDetail(item) {
         console.log(`🔍 상세 정보 수집 중: ${item.title}`);
         try {
-            const { data } = await axios.get(item.detailUrl);
+            const { data } = await axios.get(item.detailUrl, { timeout: 15000 });
             const $ = cheerio.load(data);
 
             const detail = { ...item };
@@ -118,6 +109,8 @@ class ArtNuriCrawler {
             if (periodText) {
                 // 일부 공고는 깨진 데이터를 내려주므로 (예: "2026-03-26 ~ 653 20260423 542"),
                 // 텍스트에서 YYYY-MM-DD 또는 YYYYMMDD 패턴을 추출해 정규화한다.
+                // '미정'(상시 접수) 공고는 "2026-06-02 ~" 형태로 종료일이 없다 —
+                // 시작일/종료일을 독립적으로 세팅해 이런 경우에도 시작일은 살린다.
                 const dateTokens = periodText.match(/\d{4}-?\d{2}-?\d{2}/g) || [];
                 const normalize = (s) => {
                     const m = s.match(/(\d{4})-?(\d{2})-?(\d{2})/);
@@ -127,10 +120,13 @@ class ArtNuriCrawler {
                 };
                 const start = dateTokens[0] ? normalize(dateTokens[0]) : null;
                 const end = dateTokens[1] ? normalize(dateTokens[1]) : null;
+                if (start) detail.startDate = start;
+                if (end) detail.endDate = end;
+
                 if (start && end) {
-                    detail.startDate = start;
-                    detail.endDate = end;
                     detail.period = `${start} ~ ${end}`;
+                } else if (start) {
+                    detail.period = `${start} ~`;
                 } else {
                     console.warn(`⚠️ 날짜 파싱 실패 (원문: "${periodText}") - 항목 건너뜀: ${item.title}`);
                 }

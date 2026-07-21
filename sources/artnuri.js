@@ -12,29 +12,50 @@ async function fetchAll() {
     const list = await crawler.fetchList();
 
     const items = [];
-    let skippedNoDate = 0, skippedRental = 0, failed = 0;
+    let skippedNoDate = 0, skippedRental = 0, failed = 0, ongoingCount = 0;
+    const stateCounts = {};
 
     for (const entry of list) {
         const detail = await crawler.fetchDetail(entry);
         if (!detail) { failed++; continue; }
-        if (!detail.startDate || !detail.endDate) { skippedNoDate++; continue; }
-        if (detail.title.includes('대관')) {
-            console.log(`  ⏩ 대관 정보 제외: ${detail.title}`);
+        if (!detail.startDate) { skippedNoDate++; continue; }
+
+        // '미정'(상시 접수) 공고는 종료일이 없다 — 접수 시작일 하루짜리 일정으로 등록하고
+        // 제목에 [상시]를 붙여 마감이 정해져 있지 않음을 알린다.
+        const isOngoing = detail.state === '미정' && !detail.endDate;
+        if (!detail.endDate && !isOngoing) { skippedNoDate++; continue; }
+
+        let title = detail.title;
+        let endDate = detail.endDate;
+        let description = detail.description;
+        if (isOngoing) {
+            title = `[상시] ${title}`;
+            endDate = detail.startDate;
+            description = `※ 마감일 미정(상시/수시 접수)\n${description}`;
+            ongoingCount++;
+        }
+
+        if (title.includes('대관')) {
+            console.log(`  ⏩ 대관 정보 제외: ${title}`);
             skippedRental++;
             continue;
         }
+
+        stateCounts[detail.state] = (stateCounts[detail.state] || 0) + 1;
+
         items.push({
             sourceKey: 'ARTNURI',
             docId: detail.docId,
             dedupeKey: detail.docId, // 기존 등록 이벤트의 `ID: CRL...` 형식과 호환
-            title: detail.title,
+            title: title,
             startDate: detail.startDate,
-            endDate: detail.endDate,
-            description: detail.description,
+            endDate: endDate,
+            description: description,
         });
     }
 
-    console.log(`✅ [아트누리] 등록 대상 ${items.length}건 (날짜없음 ${skippedNoDate} / 대관 ${skippedRental} / 실패 ${failed})`);
+    const stateSummary = Object.entries(stateCounts).map(([k, v]) => `${k} ${v}`).join(' / ') || '없음';
+    console.log(`✅ [아트누리] 등록 대상 ${items.length}건 (${stateSummary}, 상시 ${ongoingCount}건 포함) (날짜없음 ${skippedNoDate} / 대관 ${skippedRental} / 실패 ${failed})`);
     return items;
 }
 
