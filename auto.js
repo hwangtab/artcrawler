@@ -45,7 +45,7 @@ async function main() {
     for (const source of SOURCES) {
         const stat = {
             source: source.sourceKey,
-            added: 0, duplicated: 0, similar: 0, failed: 0, total: 0,
+            added: 0, duplicated: 0, failed: 0, total: 0,
             fetchFailed: false,
         };
         summary.push(stat);
@@ -65,13 +65,8 @@ async function main() {
 
             const dup = await calendarService.findDuplicate(CALENDAR_ID, item);
             if (dup) {
-                if (dup.reason === 'id') {
-                    console.log(`⏩ ${tag} 이미 등록된 일정: ${item.title}`);
-                    stat.duplicated++;
-                } else {
-                    console.log(`⏩ ${tag} 유사 공고 존재 ("${dup.event.summary}"): ${item.title}`);
-                    stat.similar++;
-                }
+                console.log(`⏩ ${tag} 이미 등록된 일정: ${item.title}`);
+                stat.duplicated++;
                 continue;
             }
 
@@ -100,7 +95,7 @@ main()
             if (s.fetchFailed) {
                 console.log(`   ${s.source}: ❌ 수집 실패`);
             } else {
-                console.log(`   ${s.source}: 신규 ${s.added} / 중복 ${s.duplicated} / 유사 ${s.similar} / 실패 ${s.failed} (수집 ${s.total})`);
+                console.log(`   ${s.source}: 신규 ${s.added} / 중복 ${s.duplicated} / 실패 ${s.failed} (수집 ${s.total})`);
             }
         });
         console.log('-'.repeat(60) + '\n');

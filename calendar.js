@@ -3,7 +3,6 @@ const path = require('path');
 const process = require('process');
 const { authenticate } = require('@google-cloud/local-auth');
 const { google } = require('googleapis');
-const { isSimilarTitle } = require('./lib/titleSimilarity');
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
@@ -134,33 +133,55 @@ class CalendarService {
     }
 
     /**
-     * 2단계 중복 판정 (설계: docs/superpowers/specs/2026-07-21-multi-source-adapters-design.md)
-     * 1) 설명의 `ID: <dedupeKey>` 라인 일치 → 같은 소스에서 이미 등록됨
-     * 2) 시작일 ±1일 이벤트와 제목 유사 → 다른 소스로 이미 등록됨 (안전망)
+     * ID 정확 일치로만 중복을 판정한다.
+     * 설명(description)에 `ID: <dedupeKey>)` 문자열이 포함된 이벤트를 시작일
+     * ±1일 범위에서 찾는다.
+     *
+     * 과거에는 여기에 제목 유사도 비교를 안전망으로 추가해 소스 간 중복
+     * ("아트누리"와 "KOCCA"에 같은 공고가 올라오는 경우)까지 잡으려 했으나,
+     * 실제로는 "1차/2차 모집", "아카데미/아카데미 심화과정"처럼 서로 다른
+     * 신규 공고를 유사 판정해 조용히 등록을 누락시키는 결함이었다. 또한
+     * normalizeTitle이 `[장르/지역]` 프리픽스를 통째로 지워버려 지역만 다른
+     * 템플릿 공고가 항상 중복 판정되는 문제도 있었다. Google Calendar의
+     * events.list는 기간이 겹치는 종일 이벤트를 폭넓게 반환하기 때문에
+     * "시작일 ±1일만 비교하면 안전하다"는 전제 자체가 성립하지 않았다.
+     * 아트누리·KOCCA는 서로 겹치지 않아 소스 간 중복은 원래 드물므로,
+     * 눈에 보이는 중복 1건이 조용한 신규 공고 누락보다 낫다는 판단 하에
+     * 유사도 경로를 제거하고 ID 정확 일치만 사용한다.
+     *
+     * events.list는 한 번에 최대 250건만 반환하므로, 윈도우 안에 이벤트가
+     * 많으면 nextPageToken으로 이어서 조회한다(최대 MAX_PAGES 페이지). ID를
+     * 찾으면 그 즉시 반환해 불필요한 페이지 조회를 피한다.
      */
-    async findDuplicate(calendarId, { dedupeKey, title, startDate }) {
+    async findDuplicate(calendarId, { dedupeKey, startDate }) {
         const timeMin = new Date(startDate);
         timeMin.setDate(timeMin.getDate() - 1);
         const timeMax = new Date(startDate);
         timeMax.setDate(timeMax.getDate() + 2);
 
+        const MAX_PAGES = 20; // 무한루프 방지 상한
+
         try {
-            const res = await this.calendar.events.list({
-                calendarId,
-                timeMin: timeMin.toISOString(),
-                timeMax: timeMax.toISOString(),
-                singleEvents: true,
-                maxResults: 250,
-            });
-            const events = res.data.items || [];
+            let pageToken;
+            for (let page = 0; page < MAX_PAGES; page++) {
+                const res = await this.calendar.events.list({
+                    calendarId,
+                    timeMin: timeMin.toISOString(),
+                    timeMax: timeMax.toISOString(),
+                    singleEvents: true,
+                    maxResults: 250,
+                    pageToken,
+                });
+                const events = res.data.items || [];
 
-            const idHit = events.find(e =>
-                e.description && e.description.includes(`ID: ${dedupeKey})`)
-            );
-            if (idHit) return { reason: 'id', event: idHit };
+                const idHit = events.find(e =>
+                    e.description && e.description.includes(`ID: ${dedupeKey})`)
+                );
+                if (idHit) return { reason: 'id', event: idHit };
 
-            const similar = events.find(e => e.summary && isSimilarTitle(title, e.summary));
-            if (similar) return { reason: 'similar', event: similar };
+                pageToken = res.data.nextPageToken;
+                if (!pageToken) break;
+            }
 
             return null;
         } catch (error) {
