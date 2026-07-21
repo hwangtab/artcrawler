@@ -9,8 +9,13 @@
  *
  * 수동 실행: node auto.js
  */
-const ArtNuriCrawler = require('./crawler');
 const CalendarService = require('./calendar');
+
+// 수집 소스 어댑터 목록. 새 소스는 sources/에 어댑터를 만들어 여기에 추가한다.
+const SOURCES = [
+    require('./sources/artnuri'),
+    require('./sources/kocca'),
+];
 
 // token.json / credentials.json은 process.cwd() 기준으로 읽히므로,
 // 어디서 실행하든 프로젝트 폴더를 기준으로 맞춘다.
@@ -30,69 +35,54 @@ async function main() {
     console.log(`🎨 자동 실행 시작: ${now()}`);
     console.log('='.repeat(60));
 
-    const crawler = new ArtNuriCrawler();
     const calendarService = new CalendarService();
 
     // 1. 인증 (실패 시 즉시 종료 — 로그인 창을 띄우지 않는다)
     await calendarService.authorize({ interactive: false });
 
-    // 2. 목록 수집
-    console.log('\n🕷️ 데이터 수집을 시작합니다...');
-    const items = await crawler.fetchList();
+    // 2. 소스별 수집·등록 (한 소스가 실패해도 나머지는 진행)
+    const summary = [];
+    for (const source of SOURCES) {
+        const stat = {
+            source: source.sourceKey,
+            added: 0, duplicated: 0, similar: 0, failed: 0, total: 0,
+            fetchFailed: false,
+        };
+        summary.push(stat);
 
-    if (items.length === 0) {
-        console.log('⚠️ 수집된 데이터가 없습니다.');
-        return { added: 0, duplicated: 0, skipped: 0, failed: 0, total: 0 };
+        let items;
+        try {
+            items = await source.fetchAll();
+        } catch (error) {
+            console.error(`❌ [${source.sourceKey}] 수집 실패: ${error.message}`);
+            stat.fetchFailed = true;
+            continue;
+        }
+        stat.total = items.length;
+
+        for (const [i, item] of items.entries()) {
+            const tag = `[${source.sourceKey} ${i + 1}/${items.length}]`;
+
+            const dup = await calendarService.findDuplicate(CALENDAR_ID, item);
+            if (dup) {
+                if (dup.reason === 'id') {
+                    console.log(`⏩ ${tag} 이미 등록된 일정: ${item.title}`);
+                    stat.duplicated++;
+                } else {
+                    console.log(`⏩ ${tag} 유사 공고 존재 ("${dup.event.summary}"): ${item.title}`);
+                    stat.similar++;
+                }
+                continue;
+            }
+
+            console.log(`Processing ${tag}: ${item.title} (${item.startDate} ~ ${item.endDate})`);
+            const created = await calendarService.createEvent(CALENDAR_ID, item);
+            if (created) stat.added++;
+            else stat.failed++;
+        }
     }
 
-    console.log(`\n총 ${items.length}개의 항목을 처리합니다.`);
-
-    // 3. 캘린더 등록
-    const stat = { added: 0, duplicated: 0, skipped: 0, failed: 0, total: items.length };
-    let count = 0;
-
-    for (const item of items) {
-        count++;
-        const tag = `[${count}/${items.length}]`;
-
-        const detail = await crawler.fetchDetail(item);
-
-        if (!detail) {
-            console.log(`❌ ${tag} 상세 정보 수집 실패: ${item.title}`);
-            stat.failed++;
-            continue;
-        }
-
-        if (!detail.startDate || !detail.endDate) {
-            console.log(`⏩ ${tag} 날짜 정보 없음으로 건너뜀: ${item.title}`);
-            stat.skipped++;
-            continue;
-        }
-
-        // '대관' 제외 (사용자 요청)
-        if (detail.title.includes('대관')) {
-            console.log(`⏩ ${tag} 대관 정보 제외: ${detail.title}`);
-            stat.skipped++;
-            continue;
-        }
-
-        // docId 기준 중복 확인
-        const existing = await calendarService.findEvent(CALENDAR_ID, detail.docId, detail.startDate);
-        if (existing) {
-            console.log(`⏩ ${tag} 이미 등록된 일정: ${detail.title}`);
-            stat.duplicated++;
-            continue;
-        }
-
-        console.log(`Processing ${tag}: ${detail.title} (${detail.startDate} ~ ${detail.endDate})`);
-        const created = await calendarService.createEvent(CALENDAR_ID, detail);
-
-        // createEvent는 실패를 내부에서 처리하고 undefined를 반환한다
-        if (created) stat.added++;
-        else stat.failed++;
-    }
-
-    return stat;
+    return summary;
 }
 
 // 사이트가 응답하지 않아 프로세스가 매달리는 것을 막는다
@@ -102,13 +92,20 @@ const watchdog = setTimeout(() => {
 }, MAX_RUNTIME_MS);
 
 main()
-    .then((stat) => {
+    .then((summary) => {
         clearTimeout(watchdog);
         console.log('\n' + '-'.repeat(60));
         console.log(`🎉 완료: ${now()}`);
-        console.log(`   신규 등록 ${stat.added}건 / 중복 ${stat.duplicated}건 / 건너뜀 ${stat.skipped}건 / 실패 ${stat.failed}건 (전체 ${stat.total}건)`);
+        summary.forEach(s => {
+            if (s.fetchFailed) {
+                console.log(`   ${s.source}: ❌ 수집 실패`);
+            } else {
+                console.log(`   ${s.source}: 신규 ${s.added} / 중복 ${s.duplicated} / 유사 ${s.similar} / 실패 ${s.failed} (수집 ${s.total})`);
+            }
+        });
         console.log('-'.repeat(60) + '\n');
-        process.exit(0);
+        const allFailed = summary.length > 0 && summary.every(s => s.fetchFailed);
+        process.exit(allFailed ? 1 : 0);
     })
     .catch((error) => {
         clearTimeout(watchdog);
