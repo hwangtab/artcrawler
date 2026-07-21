@@ -3,6 +3,7 @@ const path = require('path');
 const process = require('process');
 const { authenticate } = require('@google-cloud/local-auth');
 const { google } = require('googleapis');
+const { isSimilarTitle } = require('./lib/titleSimilarity');
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
@@ -128,6 +129,42 @@ class CalendarService {
             return found;
         } catch (error) {
             console.warn('⚠️ 일정 검색 중 오류 (무시하고 진행):', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * 2단계 중복 판정 (설계: docs/superpowers/specs/2026-07-21-multi-source-adapters-design.md)
+     * 1) 설명의 `ID: <dedupeKey>` 라인 일치 → 같은 소스에서 이미 등록됨
+     * 2) 시작일 ±1일 이벤트와 제목 유사 → 다른 소스로 이미 등록됨 (안전망)
+     */
+    async findDuplicate(calendarId, { dedupeKey, title, startDate }) {
+        const timeMin = new Date(startDate);
+        timeMin.setDate(timeMin.getDate() - 1);
+        const timeMax = new Date(startDate);
+        timeMax.setDate(timeMax.getDate() + 2);
+
+        try {
+            const res = await this.calendar.events.list({
+                calendarId,
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+                singleEvents: true,
+                maxResults: 250,
+            });
+            const events = res.data.items || [];
+
+            const idHit = events.find(e =>
+                e.description && e.description.includes(`ID: ${dedupeKey}`)
+            );
+            if (idHit) return { reason: 'id', event: idHit };
+
+            const similar = events.find(e => e.summary && isSimilarTitle(title, e.summary));
+            if (similar) return { reason: 'similar', event: similar };
+
+            return null;
+        } catch (error) {
+            console.warn('⚠️ 중복 검색 중 오류 (무시하고 진행):', error.message);
             return null;
         }
     }
