@@ -45,7 +45,13 @@ async function main() {
 
     // 4. Crawl Data
     console.log('\n🕷️ 아트누리 데이터 수집을 시작합니다...');
-    const items = await crawler.fetchList();
+    let items;
+    try {
+        items = await crawler.fetchList();
+    } catch (error) {
+        console.error('\n🚫 데이터 수집 실패:', error.message);
+        process.exit(1);
+    }
 
     if (items.length === 0) {
         console.log('⚠️ 수집된 데이터가 없습니다. 프로그램을 종료합니다.');

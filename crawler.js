@@ -92,7 +92,11 @@ class ArtNuriCrawler {
             return allItems;
         } catch (error) {
             console.error('❌ 목록 가져오기 실패:', error.message);
-            return allItems; // Return whatever we got
+            // 상태 순회 도중(예: '진행중' 수집 후 '예정' 단계) 네트워크 오류가 나면
+            // 부분 결과를 조용히 반환하지 않고 다시 throw한다. 부분 결과를 반환하면
+            // 호출자(sources/artnuri.js의 0건 카나리 등)가 이를 "성공"으로 오인해
+            // 조용한 데이터 손실로 이어진다. 원본 오류를 cause로 보존한다.
+            throw new Error(`아트누리 목록 수집 실패 (${error.message})`, { cause: error });
         }
     }
 
