@@ -148,8 +148,13 @@ class ArtNuriCrawler {
                     if (siteLink) applyUrl = siteLink;
                 }
 
-                const value = $(el).find('ul.view-list li').text().trim() ||
-                    $(el).find('.organ').text().trim();
+                // 여러 값을 가진 필드(예: 분야 '연극/뮤지컬/무용')는 <li>가 여러 개다.
+                // .text()로 한 번에 뽑으면 "연극뮤지컬무용"처럼 구분자 없이 붙으므로,
+                // li별로 추출해 가운뎃점으로 잇는다.
+                const parts = $(el).find('ul.view-list li')
+                    .map((i, li) => $(li).text().trim()).get()
+                    .filter(Boolean);
+                const value = parts.join('·') || $(el).find('.organ').text().trim();
 
                 if (label.includes('지원대상')) detail.target = value;
                 else if (label.includes('분야')) detail.field = value;
